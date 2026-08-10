@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DAG — Monitor de batería</title>
+
+  <!-- Fuente -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-1: #071027;
+      --bg-2: #07263a;
+      --card-border: rgba(255,255,255,0.06);
+      --muted: rgba(230,246,255,0.8);
+      --accent-teal: #00bcd4;
+      --accent-indigo: #5b6cff;
+      --accent-violet: #7e57c2;
+      --warning: #f9a825;
+      --danger: #ff5252;
+      --glass-shadow: 0 10px 30px rgba(2,6,23,0.65);
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 100%);
+      color: #eaf6ff;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .wrap { max-width:1100px; margin:36px auto; padding:20px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px }
+    header h1{ margin:0; font-weight:600; font-size:1.2rem }
+    header .small { color:var(--muted); font-size:0.95rem }
+
+    .container { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid var(--card-border);
+      box-shadow: var(--glass-shadow);
+      padding:18px;
+      border-radius:12px;
+      color: #eaf6ff;
+    }
+
+    .left { flex:1 1 640px; min-width:300px }
+    .right { width:320px; display:flex; flex-direction:column; gap:14px; min-width:260px; align-items:center }
+
+    .chart-wrap { position:relative; height:360px; border-radius:10px; overflow:hidden; }
+    canvas { width:100%; height:100%; display:block; border-radius:8px; background: linear-gradient(180deg, rgba(0,0,0,0.10), rgba(255,255,255,0.02)); padding:8px; }
+
+    /* Overlay cuando no hay batería */
+    .overlay {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      background: linear-gradient(180deg, rgba(3,10,20,0.68), rgba(3,10,20,0.68));
+      color: rgba(230,246,255,0.95); font-weight:700; font-size:1.05rem; text-align:center;
+      padding:14px; gap:8px; flex-direction:column;
+    }
+    .overlay.small { font-weight:500; font-size:0.95rem; color:var(--muted) }
+
+    .controls { display:flex; gap:10px; align-items:center; margin-top:12px }
+    button {
+      border: none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600;
+      color: #042435; background: linear-gradient(180deg, var(--accent-teal), var(--accent-indigo));
+      box-shadow: 0 6px 18px rgba(11,28,40,0.45), inset 0 -3px 6px rgba(255,255,255,0.03);
+    }
+    .btn-muted { background: transparent; color: var(--muted); border:1px solid rgba(255,255,255,0.04); box-shadow:none; }
+    .btn-secondary { background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); color: #dff6ff; border:1px solid rgba(255,255,255,0.04); }
+
+    .small { font-size:0.9rem; color:var(--muted) }
+
+    /* Batería */
+    .battery-wrap { width:240px; text-align:center; padding:12px; }
+    svg { display:block; margin:0 auto; }
+    #batFill{ transition: width 700ms cubic-bezier(.2,.9,.2,1), fill 500ms ease; transform-origin: left center; }
+    #batText { transition: fill 300ms ease; font-family: "Inter", sans-serif; }
+
+    .battery-stats { text-align:center; color:#dff6ff; font-weight:600; }
+    .stat-small { font-weight:400; color:var(--muted); font-size:0.92rem; margin-top:4px }
+
+    .badge { padding:6px 10px; border-radius:8px; font-weight:700; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.03); color:var(--muted) }
+
+    /* Toast/Alert */
+    #alertBar { display:none; position:fixed; right:20px; bottom:20px; padding:12px 16px; border-radius:10px; color:#042435; font-weight:700; box-shadow:0 10px 30px rgba(2,6,23,0.6); }
+    #alertBar.warn { background: var(--warning); }
+    #alertBar.crit { background: var(--danger); color:#fff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>DAG — Monitor de batería</h1>
+        <div class="small">Proyecto DAG — monitor en tiempo real de la batería piezoeléctrica</div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="small">Polling: <span id="pollInfo">/api/battery • 2s</span></div>
+        <div id="statusDot" style="width:12px;height:12px;border-radius:6px;background:#9aa7b8;border:1px solid rgba(255,255,255,0.03)"></div>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="card left">
+        <div class="chart-wrap">
+          <canvas id="energyChart"></canvas>
+          <div id="noBatteryOverlay" class="overlay" style="display:flex">
+            <div>No se detecta batería — gráfico deshabilitado</div>
+            <div class="small">Conecta tu API en <code style="background:rgba(255,255,255,0.03); padding:4px 6px; border-radius:6px; color:#cfeefb">/api/battery</code> o usa "Simular datos" para probar</div>
+          </div>
+        </div>
+
+        <div class="controls" style="margin-top:12px">
+          <button id="pauseBtn" disabled>Pausar</button>
+          <button id="clearBtn" class="btn-muted">Limpiar gráfico</button>
+          <button id="simulateBtn" class="btn-secondary">Simular datos</button>
+
+          <div style="margin-left:auto; text-align:right">
+            <div class="small">Última actualización</div>
+            <div id="lastUpdate" style="font-weight:700">—</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+          <label class="small" style="display:flex;gap:8px;align-items:center">
+            <input id="persistCb" type="checkbox" /> Guardar historial localmente
+          </label>
+          <label class="small" style="display:flex;gap:8px;align-items:center;margin-left:6px">
+            <input id="clearOnDisconnectCb" type="checkbox" /> Borrar historial al desconectar
+          </label>
+        </div>
+
+        <div class="legend" style="margin-top:12px; color:var(--muted); font-size:0.9rem">
+          <span style="display:flex;align-items:center;gap:8px">
+            <span style="width:12px;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--accent-teal),var(--accent-indigo))"></span> Energía generada
+          </span>
+          <span style="margin-left:14px; display:flex;align-items:center;gap:8px">
+            <span style="width:12px;height:12px;border-radius:6px;background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.04)"></span> Capacidad disponible
+          </span>
+        </div>
+      </div>
+
+      <div class="card right">
+        <div class="battery-wrap">
+          <svg id="batterySvg" viewBox="0 0 140 70" width="240" height="120" aria-label="Nivel de batería">
+            <rect x="126" y="22" width="8" height="26" rx="2" ry="2" fill="#e1f8ff" opacity="0.08" />
+            <rect x="6" y="8" width="116" height="54" rx="9" ry="9" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3"/>
+            <rect x="9" y="11" width="110" height="48" rx="7" ry="7" fill="rgba(255,255,255,0.02)" />
+            <clipPath id="batClip"><rect id="batInnerClip" x="9" y="11" width="110" height="48" rx="7" ry="7" /></clipPath>
+
+            <rect id="batFill" x="9" y="11" width="0" height="48" rx="7" ry="7" clip-path="url(#batClip)" fill="url(#gradFill)"></rect>
+
+            <defs>
+              <linearGradient id="gradFill" x1="0" x2="1">
+                <stop offset="0%" stop-color="#00bcd4"/>
+                <stop offset="100%" stop-color="#5b6cff"/>
+              </linearGradient>
+            </defs>
+
+            <text id="batText" x="64" y="38" font-size="18" font-weight="700" text-anchor="middle" fill="#e6f9ff">--%</text>
+          </svg>
+        </div>
+
+        <div class="battery-stats">
+          <div>Porcentaje: <span id="percentLabel">--%</span></div>
+          <div class="stat-small">Energía almacenada: <span id="storedKwh">-- kWh</span></div>
+          <div class="stat-small">Capacidad nominal: <span id="capKwh">50 kWh</span></div>
+        </div>
+
+        <div style="width:100%; display:flex; flex-direction:column; gap:8px; align-items:center;">
+          <div class="small" style="text-align:center; opacity:0.95">Umbrales: <span class="badge">Aviso &lt;20%</span> <span class="badge">Crítico &lt;10%</span></div>
+          <div class="small" style="text-align:center">Conecta tu API en <code style="background:rgba(255,255,255,0.03); padding:4px 6px; border-radius:6px; color:#cfeefb">/api/battery</code> o cambia API_URL en el código</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="alertBar"></div>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    /*****************************************************************
+     * Configuraciones editables
+     *****************************************************************/
+    const API_URL = '/api/battery';          // Cambia si tu endpoint es otro
+    const POLL_INTERVAL = 2000;              // ms
+    const FAILURE_THRESHOLD = 3;             // fallos consecutivos para marcar desconexión
+    const AUTH_TOKEN = null;                 // si necesitas Authorization: 'Bearer <TOKEN>' pon aquí el token
+    const DEFAULT_CAPACITY_WH = 50000;       // capacidad por defecto en Wh (50 kWh). Cambia si necesario.
+
+    // Umbrales
+    const WARN_PERCENT = 20;
+    const CRIT_PERCENT = 10;
+
+    /*****************************************************************
+     * Estado
+     *****************************************************************/
+    let batteryDetected = false;
+    let totalGeneratedWh = 0;
+    let storedWh = 0;
+    let percent = 0;
+    let consecutiveFailures = 0;
+
+    // Gráfico
+    const labels = [];
+    const data = [];
+
+    // Persistencia
+    const persistCb = document.getElementById('persistCb');
+    const clearOnDisconnectCb = document.getElementById('clearOnDisconnectCb');
+
+    // UI refs
+    const overlay = document.getElementById('noBatteryOverlay');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const simulateBtn = document.getElementById('simulateBtn');
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    const percentLabel = document.getElementById('percentLabel');
+    const storedKwhLabel = document.getElementById('storedKwh');
+    const capKwhLabel = document.getElementById('capKwh');
+    const batFill = document.getElementById('batFill');
+    const batText = document.getElementById('batText');
+    const pollInfo = document.getElementById('pollInfo');
+    const statusDot = document.getElementById('statusDot');
+    const alertBar = document.getElementById('alertBar');
+
+    capKwhLabel.textContent = (DEFAULT_CAPACITY_WH/1000) + ' kWh';
+    pollInfo.textContent = API_URL + ' • ' + (POLL_INTERVAL/1000) + 's';
+
+    /*****************************************************************
+     * Chart.js setup
+     *****************************************************************/
+    const ctx = document.getElementById('energyChart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0,0,0,360);
+    gradient.addColorStop(0, 'rgba(0,188,212,0.28)');
+    gradient.addColorStop(1, 'rgba(91,108,255,0.06)');
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Energía generada (kWh)',
+          data: data,
+          borderColor: '#00bcd4',
+          backgroundColor: gradient,
+          tension: 0.28,
+          pointRadius: 2,
+          pointBackgroundColor: '#eaffff',
+          borderWidth: 2.5,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: 'rgba(230,246,255,0.9)' } },
+          tooltip: {
+            backgroundColor: '#04212b',
+            titleColor: '#eaffff',
+            bodyColor: '#cfeefb',
+            cornerRadius: 8
+          }
+        },
+        scales: {
+          y: {
+            title: { display: true, text: 'kWh', color: 'rgba(230,246,255,0.9)' },
+            ticks: { color: 'rgba(200,230,255,0.85)' },
+            grid: { color: 'rgba(255,255,255,0.03)' },
+            beginAtZero: true
+          },
+          x: {
+            title: { display: true, text: 'Hora', color: 'rgba(230,246,255,0.9)' },
+            ticks: { color: 'rgba(200,230,255,0.75)' },
+            grid: { color: 'rgba(255,255,255,0.01)' }
+          }
+        }
+      }
+    });
+
+    /*****************************************************************
+     * Visual battery helpers
+     *****************************************************************/
+    function colorForPercent(p) {
+      if (p >= 60) return ['#00bcd4','#00acc1'];
+      if (p >= 30) return ['#5b6cff','#3f4fe6'];
+      return ['#7e57c2','#6b3fb8'];
+    }
+
+    function updateBatteryVisual() {
+      const innerWidth = 110;
+      const fillWidth = (innerWidth * Math.max(0, Math.min(100, percent))) / 100;
+      batFill.setAttribute('width', fillWidth);
+
+      const grad = document.getElementById('gradFill') || document.querySelector('#gradFill');
+      // si no existe (por seguridad), crear un grad simple
+      if (!grad) {
+        const defs = document.querySelector('svg defs') || document.createElementNS('http://www.w3.org/2000/svg','defs');
+      } else {
+        const colors = colorForPercent(percent);
+        const stops = grad.querySelectorAll('stop');
+        if (stops.length >= 2) {
+          stops[0].setAttribute('stop-color', colors[0]);
+          stops[1].setAttribute('stop-color', colors[1]);
+        }
+      }
+
+      batText.textContent = batteryDetected ? Math.round(percent) + '%' : '--%';
+      percentLabel.textContent = batteryDetected ? Math.round(percent) + '%' : '--%';
+      storedKwhLabel.textContent = batteryDetected ? (storedWh/1000).toFixed(2) + ' kWh' : '-- kWh';
+      lastUpdateEl.textContent = batteryDetected ? new Date().toLocaleTimeString() : '—';
+      statusDot.style.background = batteryDetected ? '#4fd1c5' : '#9aa7b8';
+    }
+
+    /*****************************************************************
+     * Chart update helpers
+     *****************************************************************/
+    function addPoint(timestamp, generatedWh) {
+      if (!batteryDetected) return;
+      totalGeneratedWh += generatedWh;
+      labels.push(new Date(timestamp).toLocaleTimeString());
+      data.push((totalGeneratedWh/1000).toFixed(3));
+      if (labels.length > 120) { labels.shift(); data.shift(); }
+      chart.update('none');
+      maybePersist();
+    }
+
+    function maybePersist() {
+      if (!persistCb.checked) return;
+      try {
+        const payload = { labels, data, totalGeneratedWh, storedWh, percent };
+        localStorage.setItem('dag_battery_log', JSON.stringify(payload));
+      } catch (e) { console.warn('No se pudo persistir historial:', e); }
+    }
+
+    function restorePersist() {
+      try {
+        const raw = localStorage.getItem('dag_battery_log');
+        if (!raw) return false;
+        const obj = JSON.parse(raw);
+        if (obj.labels && obj.data) {
+          labels.splice(0, labels.length, ...obj.labels);
+          data.splice(0, data.length, ...obj.data);
+          totalGeneratedWh = obj.totalGeneratedWh || 0;
+          storedWh = obj.storedWh || storedWh;
+          percent = obj.percent || percent;
+          chart.update();
+          updateBatteryVisual();
+          return true;
+        }
+      } catch (e) { console.warn('Error restaurando historial:', e); }
+      return false;
+    }
+
+    /*****************************************************************
+     * Polling / detection
+     *****************************************************************/
+    let pollTimer = null;
+    let pollingPaused = false;
+
+    async function pollOnce() {
+      if (pollingPaused) return;
+      try {
+        const headers = AUTH_TOKEN ? { 'Authorization': 'Bearer ' + AUTH_TOKEN } : {};
+        const res = await fetch(API_URL, { method: 'GET', cache: 'no-store', headers });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        consecutiveFailures = 0;
+        // si recibimos datos válidos, activamos detección
+        if (json && (json.storedWh != null || json.percentage != null || json.totalGeneratedWh != null)) {
+          updateFromApi(json);
+        } else {
+          // si la API responde 200 pero sin datos, consideramos desconectada
+          consecutiveFailures++;
+          if (consecutiveFailures >= FAILURE_THRESHOLD) setBatteryDetected(false);
+        }
+      } catch (err) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= FAILURE_THRESHOLD) setBatteryDetected(false);
+        console.debug('Poll error:', err);
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(pollOnce, POLL_INTERVAL);
+      // hacer uno inmediato
+      pollOnce();
+    }
+
+    function stopPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+    }
+
+    function setBatteryDetected(detected) {
+      batteryDetected = !!detected;
+      overlay.style.display = batteryDetected ? 'none' : 'flex';
+      pauseBtn.disabled = !batteryDetected;
+      // comportamiento al desconectar
+      if (!batteryDetected) {
+        if (clearOnDisconnectCb.checked) {
+          labels.length = 0; data.length = 0; totalGeneratedWh = 0;
+          chart.update();
+          localStorage.removeItem('dag_battery_log');
+        }
+        // detener simulación si estaba en marcha
+        stopSimulation();
+      } else {
+        if (!storedWh) storedWh = DEFAULT_CAPACITY_WH * 0.5;
+        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
+        updateBatteryVisual();
+        // restaurar historial si persist enabled
+        if (persistCb.checked) restorePersist();
+      }
+    }
+
+    /*****************************************************************
+     * updateFromApi - contrato flexible
+     * esperado: {
+     *   timestamp: "2026-08-03T12:34:56Z",
+     *   percentage: 72.3,
+     *   storedWh: 36150,
+     *   generatedWhSinceLast: 120,
+     *   totalGeneratedWh: 123450
+     * }
+     *****************************************************************/
+    function updateFromApi(json) {
+      if (!json) return;
+      // actualizar almacenado / porcentaje
+      if (json.storedWh != null) {
+        storedWh = Number(json.storedWh);
+        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
+      } else if (json.percentage != null) {
+        percent = Number(json.percentage);
+        storedWh = Math.round(DEFAULT_CAPACITY_WH * (percent / 100));
+      }
+
+      // activar detección
+      setBatteryDetected(true);
+      consecutiveFailures = 0;
+
+      // gráficos: prioridad a generatedWhSinceLast; si no, manejar totalGeneratedWh
+      if (json.generatedWhSinceLast != null && json.timestamp) {
+        addPoint(new Date(json.timestamp), Number(json.generatedWhSinceLast));
+      } else if (json.totalGeneratedWh != null && json.timestamp) {
+        totalGeneratedWh = Number(json.totalGeneratedWh);
+        labels.push(new Date(json.timestamp).toLocaleTimeString());
+        data.push((totalGeneratedWh/1000).toFixed(3));
+        if (labels.length > 120) { labels.shift(); data.shift(); }
+        chart.update();
+      }
+
+      updateBatteryVisual();
+      evaluateAlerts();
+    }
+
+    /*****************************************************************
+     * Alerts (visual)
+     *****************************************************************/
+    function evaluateAlerts() {
+      if (!batteryDetected) { hideAlert(); return; }
+      if (percent < CRIT_PERCENT) {
+        showAlert('CRÍTICO: batería muy baja (' + Math.round(percent) + '%)', 'crit');
+      } else if (percent < WARN_PERCENT) {
+        showAlert('Aviso: batería baja (' + Math.round(percent) + '%)', 'warn');
+      } else {
+        hideAlert();
+      }
+    }
+
+    function showAlert(text, type) {
+      alertBar.textContent = text;
+      alertBar.className = type === 'crit' ? 'crit' : 'warn';
+      alertBar.style.display = 'block';
+    }
+
+    function hideAlert() {
+      alertBar.style.display = 'none';
+      alertBar.className = '';
+    }
+
+    /*****************************************************************
+     * Simulation helpers (para pruebas locales)
+     *****************************************************************/
+    let simInterval = null;
+    let simRunning = false;
+    function startSimulation() {
+      if (simInterval) clearInterval(simInterval);
+      simInterval = setInterval(() => {
+        // generar datos de prueba (simula lectura API)
+        const now = new Date().toISOString();
+        const generatedWh = Math.random() * 600;
+        // actualizar storedWh con inefficiency example
+        const efficiency = 0.9;
+        const consumptionWh = Math.random() * 80;
+        storedWh = Math.max(0, Math.min(DEFAULT_CAPACITY_WH, storedWh + generatedWh * efficiency - consumptionWh));
+        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
+        const fake = {
+          timestamp: now,
+          storedWh: Math.round(storedWh),
+          generatedWhSinceLast: Math.round(generatedWh)
+        };
+        updateFromApi(fake);
+      }, 1200);
+      simRunning = true;
+      simulateBtn.textContent = 'Detener simulación';
+    }
+
+    function stopSimulation() {
+      if (simInterval) clearInterval(simInterval);
+      simInterval = null;
+      simRunning = false;
+      simulateBtn.textContent = 'Simular datos';
+    }
+
+    simulateBtn.addEventListener('click', () => {
+      if (!batteryDetected) {
+        // si no está detectada, al simular forzamos detección inicial
+        setBatteryDetected(true);
+        storedWh = DEFAULT_CAPACITY_WH * 0.5;
+        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
+        updateBatteryVisual();
+      }
+      if (simRunning) stopSimulation(); else startSimulation();
+    });
+
+    /*****************************************************************
+     * Controls
+     *****************************************************************/
+    let pollingActive = true;
+    pauseBtn.addEventListener('click', () => {
+      if (!pollingActive) {
+        pollingActive = true; pauseBtn.textContent = 'Pausar'; startPolling();
+      } else {
+        pollingActive = false; pauseBtn.textContent = 'Reanudar'; stopPolling();
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      labels.length = 0; data.length = 0; totalGeneratedWh = 0;
+      chart.update();
+      localStorage.removeItem('dag_battery_log');
+    });
+
+    /*****************************************************************
+     * Persistence toggle restores if checked
+     *****************************************************************/
+    persistCb.addEventListener('change', () => {
+      if (persistCb.checked) restorePersist();
+      else localStorage.removeItem('dag_battery_log');
+    });
+
+    /*****************************************************************
+     * Startup: intentar detectar automáticamente la batería consultando API una vez.
+     *****************************************************************/
+    async function initialDetect() {
+      try {
+        const headers = AUTH_TOKEN ? { 'Authorization': 'Bearer ' + AUTH_TOKEN } : {};
+        const res = await fetch(API_URL, { method: 'GET', cache: 'no-store', headers });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        if (json && (json.storedWh != null || json.percentage != null || json.totalGeneratedWh != null)) {
+          updateFromApi(json);
+          // iniciar polling continuo
+          startPolling();
+          return;
+        }
+      } catch (e) {
+        // no hay endpoint ahora -> marcar desconectado y aún así iniciar polling para detectar más tarde
+      }
+      setBatteryDetected(false);
+      startPolling();
+    }
+
+    // Ejecutar inicialización
+    initialDetect();
+
+    // Guardado limpio al salir (si persist)
+    window.addEventListener('beforeunload', () => {
+      if (persistCb.checked) maybePersist();
+    });
+
+    // Exponer botón para pruebas manuales desde consola si hace falta:
+    window.__dag = { updateFromApi, setBatteryDetected };
+
+  </script>
+</body>
+</html>
