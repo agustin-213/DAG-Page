@@ -33,7 +33,7 @@
     }
 
     .wrap { max-width:1100px; margin:36px auto; padding:20px; }
-    header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap: wrap; }
     header h1{ margin:0; font-weight:600; font-size:1.2rem }
     header .small { color:var(--muted); font-size:0.95rem }
 
@@ -62,7 +62,7 @@
     }
     .overlay.small { font-weight:500; font-size:0.95rem; color:var(--muted) }
 
-    .controls { display:flex; gap:10px; align-items:center; margin-top:12px }
+    .controls { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap }
     button {
       border: none; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600;
       color: #042435; background: linear-gradient(180deg, var(--accent-teal), var(--accent-indigo));
@@ -84,23 +84,83 @@
 
     .badge { padding:6px 10px; border-radius:8px; font-weight:700; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.03); color:var(--muted) }
 
+    /* Voltaje y Batería Info */
+    .info-cards {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      width: 100%;
+    }
+
+    .info-card {
+      flex: 1;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--card-border);
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .info-card .label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+    }
+
+    .info-card .value {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--accent-teal);
+    }
+
     /* Toast/Alert */
-    #alertBar { display:none; position:fixed; right:20px; bottom:20px; padding:12px 16px; border-radius:10px; color:#042435; font-weight:700; box-shadow:0 10px 30px rgba(2,6,23,0.6); }
+    #alertBar { display:none; position:fixed; right:20px; bottom:20px; padding:12px 16px; border-radius:10px; color:#042435; font-weight:700; box-shadow:0 10px 30px rgba(2,6,23,0.6); z-index: 999; }
     #alertBar.warn { background: var(--warning); }
     #alertBar.crit { background: var(--danger); color:#fff; }
+
+    /* Firebase Status */
+    .status-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #9aa7b8;
+    }
+
+    .status-dot.connected {
+      background: #4fd1c5;
+      box-shadow: 0 0 8px #4fd1c5;
+    }
+
+    .status-dot.error {
+      background: #ff5252;
+      box-shadow: 0 0 8px #ff5252;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div>
-        <h1><img src="Logotipo oscuro.xcf" alt=""></h1>
+        <h1><img src="Logotipo oscuro.xcf" alt="DAG"></h1>
         <div class="small"> DAG — monitor de batería</div>
       </div>
 
-      <div style="display:flex;gap:10px;align-items:center">
-        <div class="small">Polling: <span id="pollInfo">/api/battery • 2s</span></div>
-        <div id="statusDot" style="width:12px;height:12px;border-radius:6px;background:#9aa7b8;border:1px solid rgba(255,255,255,0.03)"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="status-bar">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Desconectado</span>
+        </div>
       </div>
     </header>
 
@@ -109,13 +169,13 @@
         <div class="chart-wrap">
           <canvas id="energyChart"></canvas>
           <div id="noBatteryOverlay" class="overlay" style="display:flex">
-            <div>No se detecta batería — gráfico deshabilitado</div>
-            <div class="small">Conecta tu API en <code style="background:rgba(255,255,255,0.03); padding:4px 6px; border-radius:6px; color:#cfeefb">/api/battery</code> o usa "Simular datos" para probar</div>
+            <div>No se detecta conexión a Firebase</div>
+            <div class="small">Conectando a datos del Arduino...</div>
           </div>
         </div>
 
         <div class="controls" style="margin-top:12px">
-          <button id="pauseBtn" disabled>Pausar</button>
+          <button id="pauseBtn" disabled>Pausar monitoreo</button>
           <button id="clearBtn" class="btn-muted">Limpiar gráfico</button>
           <button id="simulateBtn" class="btn-secondary">Simular datos</button>
 
@@ -125,9 +185,9 @@
           </div>
         </div>
 
-        <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
           <label class="small" style="display:flex;gap:8px;align-items:center">
-            <input id="persistCb" type="checkbox" /> Guardar historial localmente
+            <input id="persistCb" type="checkbox" checked /> Guardar historial localmente
           </label>
           <label class="small" style="display:flex;gap:8px;align-items:center;margin-left:6px">
             <input id="clearOnDisconnectCb" type="checkbox" /> Borrar historial al desconectar
@@ -136,10 +196,10 @@
 
         <div class="legend" style="margin-top:12px; color:var(--muted); font-size:0.9rem">
           <span style="display:flex;align-items:center;gap:8px">
-            <span style="width:12px;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--accent-teal),var(--accent-indigo))"></span> Energía generada
+            <span style="width:12px;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--accent-teal),var(--accent-indigo))"></span> Porcentaje de batería
           </span>
           <span style="margin-left:14px; display:flex;align-items:center;gap:8px">
-            <span style="width:12px;height:12px;border-radius:6px;background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.04)"></span> Capacidad disponible
+            <span style="width:12px;height:12px;border-radius:6px;background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.04)"></span> Voltaje (V)
           </span>
         </div>
       </div>
@@ -166,14 +226,23 @@
         </div>
 
         <div class="battery-stats">
-          <div>Porcentaje: <span id="percentLabel">--%</span></div>
-          <div class="stat-small">Energía almacenada: <span id="storedKwh">-- kWh</span></div>
-          <div class="stat-small">Capacidad nominal: <span id="capKwh">50 kWh</span></div>
+          <div>Batería: <span id="percentLabel">--%</span></div>
+          <div class="stat-small">Voltaje: <span id="voltageLabel">-- V</span></div>
         </div>
 
-        <div style="width:100%; display:flex; flex-direction:column; gap:8px; align-items:center;">
+        <div class="info-cards">
+          <div class="info-card">
+            <div class="label">Batería</div>
+            <div class="value" id="batteryValueCard">--%</div>
+          </div>
+          <div class="info-card">
+            <div class="label">Voltaje</div>
+            <div class="value" id="voltageValueCard">-- V</div>
+          </div>
+        </div>
+
+        <div style="width:100%; display:flex; flex-direction:column; gap:8px; align-items:center; margin-top: 12px;">
           <div class="small" style="text-align:center; opacity:0.95">Umbrales: <span class="badge">Aviso &lt;20%</span> <span class="badge">Crítico &lt;10%</span></div>
-          <div class="small" style="text-align:center">Conecta tu API en <code style="background:rgba(255,255,255,0.03); padding:4px 6px; border-radius:6px; color:#cfeefb">/api/battery</code> o cambia API_URL en el código</div>
         </div>
       </div>
     </div>
@@ -184,36 +253,40 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <script>
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
     /*****************************************************************
-     * Configuraciones editables
+     * Configuración Firebase - Usando tus credenciales
      *****************************************************************/
-    const API_URL = '/api/battery';          // Cambia si tu endpoint es otro
-    const POLL_INTERVAL = 2000;              // ms
-    const FAILURE_THRESHOLD = 3;             // fallos consecutivos para marcar desconexión
-    const AUTH_TOKEN = null;                 // si necesitas Authorization: 'Bearer <TOKEN>' pon aquí el token
-    const DEFAULT_CAPACITY_WH = 50000;       // capacidad por defecto en Wh (50 kWh). Cambia si necesario.
+    const firebaseConfig = {
+      apiKey: "AIzaSyAaajV8M_4CAADuPpaF7uzYW7lAqTpc5vE",
+      authDomain: "dag-page.firebaseapp.com",
+      databaseURL: "https://dag-page-default-rtdb.firebaseio.com",
+      projectId: "dag-page",
+      storageBucket: "dag-page.firebasestorage.app",
+      messagingSenderId: "334648708303",
+      appId: "1:334648708303:web:891f0ebe6c41e84f8dbbba",
+      measurementId: "G-W5ELGYYKXH"
+    };
 
-    // Umbrales
-    const WARN_PERCENT = 20;
-    const CRIT_PERCENT = 10;
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
 
     /*****************************************************************
-     * Estado
+     * Estado Global
      *****************************************************************/
     let batteryDetected = false;
-    let totalGeneratedWh = 0;
-    let storedWh = 0;
-    let percent = 0;
+    let currentBattery = 0;
+    let currentVoltage = 0;
     let consecutiveFailures = 0;
 
-    // Gráfico
+    // Gráfico - almacenará ambos datasets
     const labels = [];
-    const data = [];
-
-    // Persistencia
-    const persistCb = document.getElementById('persistCb');
-    const clearOnDisconnectCb = document.getElementById('clearOnDisconnectCb');
+    const batteryData = [];
+    const voltageData = [];
 
     // UI refs
     const overlay = document.getElementById('noBatteryOverlay');
@@ -222,40 +295,59 @@
     const simulateBtn = document.getElementById('simulateBtn');
     const lastUpdateEl = document.getElementById('lastUpdate');
     const percentLabel = document.getElementById('percentLabel');
-    const storedKwhLabel = document.getElementById('storedKwh');
-    const capKwhLabel = document.getElementById('capKwh');
+    const voltageLabel = document.getElementById('voltageLabel');
+    const batteryValueCard = document.getElementById('batteryValueCard');
+    const voltageValueCard = document.getElementById('voltageValueCard');
     const batFill = document.getElementById('batFill');
     const batText = document.getElementById('batText');
-    const pollInfo = document.getElementById('pollInfo');
     const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
     const alertBar = document.getElementById('alertBar');
-
-    capKwhLabel.textContent = (DEFAULT_CAPACITY_WH/1000) + ' kWh';
-    pollInfo.textContent = API_URL + ' • ' + (POLL_INTERVAL/1000) + 's';
+    const persistCb = document.getElementById('persistCb');
+    const clearOnDisconnectCb = document.getElementById('clearOnDisconnectCb');
 
     /*****************************************************************
-     * Chart.js setup
+     * Chart.js setup - Dos series (Batería y Voltaje)
      *****************************************************************/
     const ctx = document.getElementById('energyChart').getContext('2d');
-    const gradient = ctx.createLinearGradient(0,0,0,360);
-    gradient.addColorStop(0, 'rgba(0,188,212,0.28)');
-    gradient.addColorStop(1, 'rgba(91,108,255,0.06)');
+    const gradient1 = ctx.createLinearGradient(0,0,0,360);
+    gradient1.addColorStop(0, 'rgba(0,188,212,0.28)');
+    gradient1.addColorStop(1, 'rgba(91,108,255,0.06)');
+
+    const gradient2 = ctx.createLinearGradient(0,0,0,360);
+    gradient2.addColorStop(0, 'rgba(255,193,7,0.2)');
+    gradient2.addColorStop(1, 'rgba(255,152,0,0.05)');
 
     const chart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: labels,
-        datasets: [{
-          label: 'Energía generada (kWh)',
-          data: data,
-          borderColor: '#00bcd4',
-          backgroundColor: gradient,
-          tension: 0.28,
-          pointRadius: 2,
-          pointBackgroundColor: '#eaffff',
-          borderWidth: 2.5,
-          fill: true
-        }]
+        datasets: [
+          {
+            label: 'Batería (%)',
+            data: batteryData,
+            borderColor: '#00bcd4',
+            backgroundColor: gradient1,
+            tension: 0.28,
+            pointRadius: 2,
+            pointBackgroundColor: '#eaffff',
+            borderWidth: 2.5,
+            fill: true,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Voltaje (V)',
+            data: voltageData,
+            borderColor: '#ffc107',
+            backgroundColor: gradient2,
+            tension: 0.28,
+            pointRadius: 2,
+            pointBackgroundColor: '#ffe082',
+            borderWidth: 2.5,
+            fill: true,
+            yAxisID: 'y1'
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -272,10 +364,24 @@
         },
         scales: {
           y: {
-            title: { display: true, text: 'kWh', color: 'rgba(230,246,255,0.9)' },
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: { display: true, text: 'Batería (%)', color: 'rgba(230,246,255,0.9)' },
             ticks: { color: 'rgba(200,230,255,0.85)' },
             grid: { color: 'rgba(255,255,255,0.03)' },
-            beginAtZero: true
+            min: 0,
+            max: 100
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            title: { display: true, text: 'Voltaje (V)', color: 'rgba(230,246,255,0.9)' },
+            ticks: { color: 'rgba(255,200,0,0.85)' },
+            grid: { drawOnChartArea: false },
+            min: 0,
+            max: 15
           },
           x: {
             title: { display: true, text: 'Hora', color: 'rgba(230,246,255,0.9)' },
@@ -297,15 +403,12 @@
 
     function updateBatteryVisual() {
       const innerWidth = 110;
-      const fillWidth = (innerWidth * Math.max(0, Math.min(100, percent))) / 100;
+      const fillWidth = (innerWidth * Math.max(0, Math.min(100, currentBattery))) / 100;
       batFill.setAttribute('width', fillWidth);
 
-      const grad = document.getElementById('gradFill') || document.querySelector('#gradFill');
-      // si no existe (por seguridad), crear un grad simple
-      if (!grad) {
-        const defs = document.querySelector('svg defs') || document.createElementNS('http://www.w3.org/2000/svg','defs');
-      } else {
-        const colors = colorForPercent(percent);
+      const grad = document.getElementById('gradFill');
+      if (grad) {
+        const colors = colorForPercent(currentBattery);
         const stops = grad.querySelectorAll('stop');
         if (stops.length >= 2) {
           stops[0].setAttribute('stop-color', colors[0]);
@@ -313,30 +416,21 @@
         }
       }
 
-      batText.textContent = batteryDetected ? Math.round(percent) + '%' : '--%';
-      percentLabel.textContent = batteryDetected ? Math.round(percent) + '%' : '--%';
-      storedKwhLabel.textContent = batteryDetected ? (storedWh/1000).toFixed(2) + ' kWh' : '-- kWh';
+      batText.textContent = batteryDetected ? Math.round(currentBattery) + '%' : '--%';
+      percentLabel.textContent = batteryDetected ? Math.round(currentBattery) + '%' : '--%';
+      voltageLabel.textContent = batteryDetected ? currentVoltage.toFixed(2) + ' V' : '-- V';
+      batteryValueCard.textContent = batteryDetected ? Math.round(currentBattery) + '%' : '--%';
+      voltageValueCard.textContent = batteryDetected ? currentVoltage.toFixed(2) + ' V' : '-- V';
       lastUpdateEl.textContent = batteryDetected ? new Date().toLocaleTimeString() : '—';
-      statusDot.style.background = batteryDetected ? '#4fd1c5' : '#9aa7b8';
     }
 
     /*****************************************************************
-     * Chart update helpers
+     * Persistencia
      *****************************************************************/
-    function addPoint(timestamp, generatedWh) {
-      if (!batteryDetected) return;
-      totalGeneratedWh += generatedWh;
-      labels.push(new Date(timestamp).toLocaleTimeString());
-      data.push((totalGeneratedWh/1000).toFixed(3));
-      if (labels.length > 120) { labels.shift(); data.shift(); }
-      chart.update('none');
-      maybePersist();
-    }
-
     function maybePersist() {
       if (!persistCb.checked) return;
       try {
-        const payload = { labels, data, totalGeneratedWh, storedWh, percent };
+        const payload = { labels, batteryData, voltageData, currentBattery, currentVoltage };
         localStorage.setItem('dag_battery_log', JSON.stringify(payload));
       } catch (e) { console.warn('No se pudo persistir historial:', e); }
     }
@@ -346,12 +440,12 @@
         const raw = localStorage.getItem('dag_battery_log');
         if (!raw) return false;
         const obj = JSON.parse(raw);
-        if (obj.labels && obj.data) {
+        if (obj.labels && obj.batteryData) {
           labels.splice(0, labels.length, ...obj.labels);
-          data.splice(0, data.length, ...obj.data);
-          totalGeneratedWh = obj.totalGeneratedWh || 0;
-          storedWh = obj.storedWh || storedWh;
-          percent = obj.percent || percent;
+          batteryData.splice(0, batteryData.length, ...obj.batteryData);
+          voltageData.splice(0, voltageData.length, ...obj.voltageData);
+          currentBattery = obj.currentBattery || 0;
+          currentVoltage = obj.currentVoltage || 0;
           chart.update();
           updateBatteryVisual();
           return true;
@@ -361,102 +455,39 @@
     }
 
     /*****************************************************************
-     * Polling / detection
+     * Actualizar desde Firebase
      *****************************************************************/
-    let pollTimer = null;
-    let pollingPaused = false;
+    function updateFromFirebase(data) {
+      if (!data) return;
 
-    async function pollOnce() {
-      if (pollingPaused) return;
-      try {
-        const headers = AUTH_TOKEN ? { 'Authorization': 'Bearer ' + AUTH_TOKEN } : {};
-        const res = await fetch(API_URL, { method: 'GET', cache: 'no-store', headers });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const json = await res.json();
-        consecutiveFailures = 0;
-        // si recibimos datos válidos, activamos detección
-        if (json && (json.storedWh != null || json.percentage != null || json.totalGeneratedWh != null)) {
-          updateFromApi(json);
-        } else {
-          // si la API responde 200 pero sin datos, consideramos desconectada
-          consecutiveFailures++;
-          if (consecutiveFailures >= FAILURE_THRESHOLD) setBatteryDetected(false);
-        }
-      } catch (err) {
-        consecutiveFailures++;
-        if (consecutiveFailures >= FAILURE_THRESHOLD) setBatteryDetected(false);
-        console.debug('Poll error:', err);
-      }
-    }
-
-    function startPolling() {
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(pollOnce, POLL_INTERVAL);
-      // hacer uno inmediato
-      pollOnce();
-    }
-
-    function stopPolling() {
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = null;
-    }
-
-    function setBatteryDetected(detected) {
-      batteryDetected = !!detected;
-      overlay.style.display = batteryDetected ? 'none' : 'flex';
-      pauseBtn.disabled = !batteryDetected;
-      // comportamiento al desconectar
-      if (!batteryDetected) {
-        if (clearOnDisconnectCb.checked) {
-          labels.length = 0; data.length = 0; totalGeneratedWh = 0;
-          chart.update();
-          localStorage.removeItem('dag_battery_log');
-        }
-        // detener simulación si estaba en marcha
-        stopSimulation();
-      } else {
-        if (!storedWh) storedWh = DEFAULT_CAPACITY_WH * 0.5;
-        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
-        updateBatteryVisual();
-        // restaurar historial si persist enabled
-        if (persistCb.checked) restorePersist();
-      }
-    }
-
-    /*****************************************************************
-     * updateFromApi - contrato flexible
-     * esperado: {
-     *   timestamp: "2026-08-03T12:34:56Z",
-     *   percentage: 72.3,
-     *   storedWh: 36150,
-     *   generatedWhSinceLast: 120,
-     *   totalGeneratedWh: 123450
-     * }
-     *****************************************************************/
-    function updateFromApi(json) {
-      if (!json) return;
-      // actualizar almacenado / porcentaje
-      if (json.storedWh != null) {
-        storedWh = Number(json.storedWh);
-        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
-      } else if (json.percentage != null) {
-        percent = Number(json.percentage);
-        storedWh = Math.round(DEFAULT_CAPACITY_WH * (percent / 100));
+      // Leer batería y voltaje de Firebase
+      if (data.bateria != null) {
+        currentBattery = Number(data.bateria);
       }
 
-      // activar detección
+      if (data.voltaje != null) {
+        currentVoltage = Number(data.voltaje);
+      }
+
       setBatteryDetected(true);
       consecutiveFailures = 0;
 
-      // gráficos: prioridad a generatedWhSinceLast; si no, manejar totalGeneratedWh
-      if (json.generatedWhSinceLast != null && json.timestamp) {
-        addPoint(new Date(json.timestamp), Number(json.generatedWhSinceLast));
-      } else if (json.totalGeneratedWh != null && json.timestamp) {
-        totalGeneratedWh = Number(json.totalGeneratedWh);
-        labels.push(new Date(json.timestamp).toLocaleTimeString());
-        data.push((totalGeneratedWh/1000).toFixed(3));
-        if (labels.length > 120) { labels.shift(); data.shift(); }
-        chart.update();
+      // Agregar punto al gráfico
+      const timeStr = new Date().toLocaleTimeString();
+      if (!labels.includes(timeStr) || labels[labels.length - 1] !== timeStr) {
+        labels.push(timeStr);
+        batteryData.push(currentBattery);
+        voltageData.push(currentVoltage);
+
+        // Limitar a 120 puntos en el gráfico
+        if (labels.length > 120) {
+          labels.shift();
+          batteryData.shift();
+          voltageData.shift();
+        }
+
+        chart.update('none');
+        maybePersist();
       }
 
       updateBatteryVisual();
@@ -464,14 +495,14 @@
     }
 
     /*****************************************************************
-     * Alerts (visual)
+     * Alertas
      *****************************************************************/
     function evaluateAlerts() {
       if (!batteryDetected) { hideAlert(); return; }
-      if (percent < CRIT_PERCENT) {
-        showAlert('CRÍTICO: batería muy baja (' + Math.round(percent) + '%)', 'crit');
-      } else if (percent < WARN_PERCENT) {
-        showAlert('Aviso: batería baja (' + Math.round(percent) + '%)', 'warn');
+      if (currentBattery < 10) {
+        showAlert('CRÍTICO: batería muy baja (' + Math.round(currentBattery) + '%)', 'crit');
+      } else if (currentBattery < 20) {
+        showAlert('Aviso: batería baja (' + Math.round(currentBattery) + '%)', 'warn');
       } else {
         hideAlert();
       }
@@ -489,27 +520,21 @@
     }
 
     /*****************************************************************
-     * Simulation helpers (para pruebas locales)
+     * Simulación de datos
      *****************************************************************/
     let simInterval = null;
     let simRunning = false;
+
     function startSimulation() {
       if (simInterval) clearInterval(simInterval);
       simInterval = setInterval(() => {
-        // generar datos de prueba (simula lectura API)
-        const now = new Date().toISOString();
-        const generatedWh = Math.random() * 600;
-        // actualizar storedWh con inefficiency example
-        const efficiency = 0.9;
-        const consumptionWh = Math.random() * 80;
-        storedWh = Math.max(0, Math.min(DEFAULT_CAPACITY_WH, storedWh + generatedWh * efficiency - consumptionWh));
-        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
-        const fake = {
-          timestamp: now,
-          storedWh: Math.round(storedWh),
-          generatedWhSinceLast: Math.round(generatedWh)
-        };
-        updateFromApi(fake);
+        const fakeBattery = Math.max(0, Math.min(100, currentBattery + (Math.random() - 0.5) * 5));
+        const fakeVoltage = Math.max(0, Math.min(14, currentVoltage + (Math.random() - 0.5) * 0.5));
+
+        updateFromFirebase({
+          bateria: fakeBattery,
+          voltaje: fakeVoltage
+        });
       }, 1200);
       simRunning = true;
       simulateBtn.textContent = 'Detener simulación';
@@ -524,74 +549,123 @@
 
     simulateBtn.addEventListener('click', () => {
       if (!batteryDetected) {
-        // si no está detectada, al simular forzamos detección inicial
         setBatteryDetected(true);
-        storedWh = DEFAULT_CAPACITY_WH * 0.5;
-        percent = (storedWh / DEFAULT_CAPACITY_WH) * 100;
+        currentBattery = 75;
+        currentVoltage = 12;
         updateBatteryVisual();
       }
       if (simRunning) stopSimulation(); else startSimulation();
     });
 
     /*****************************************************************
-     * Controls
+     * Controles
      *****************************************************************/
-    let pollingActive = true;
+    let monitoringActive = true;
+    let firebaseListener = null;
+
+    function startMonitoring() {
+      try {
+        const dbRef = ref(database, '/'); // Leer todo
+
+        firebaseListener = onValue(dbRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            consecutiveFailures = 0;
+            updateFromFirebase(data);
+          } else {
+            consecutiveFailures++;
+            if (consecutiveFailures >= 3) {
+              setBatteryDetected(false);
+            }
+          }
+        }, (error) => {
+          console.error('Error leyendo datos de Firebase:', error);
+          consecutiveFailures++;
+          if (consecutiveFailures >= 3) {
+            setBatteryDetected(false);
+          }
+        });
+      } catch (error) {
+        console.error('Error iniciando monitoreo:', error);
+        setBatteryDetected(false);
+      }
+    }
+
     pauseBtn.addEventListener('click', () => {
-      if (!pollingActive) {
-        pollingActive = true; pauseBtn.textContent = 'Pausar'; startPolling();
+      if (!monitoringActive) {
+        monitoringActive = true;
+        pauseBtn.textContent = 'Pausar monitoreo';
+        startMonitoring();
       } else {
-        pollingActive = false; pauseBtn.textContent = 'Reanudar'; stopPolling();
+        monitoringActive = false;
+        pauseBtn.textContent = 'Reanudar monitoreo';
+        if (firebaseListener) firebaseListener();
       }
     });
 
     clearBtn.addEventListener('click', () => {
-      labels.length = 0; data.length = 0; totalGeneratedWh = 0;
+      labels.length = 0;
+      batteryData.length = 0;
+      voltageData.length = 0;
       chart.update();
       localStorage.removeItem('dag_battery_log');
     });
 
-    /*****************************************************************
-     * Persistence toggle restores if checked
-     *****************************************************************/
     persistCb.addEventListener('change', () => {
       if (persistCb.checked) restorePersist();
       else localStorage.removeItem('dag_battery_log');
     });
 
     /*****************************************************************
-     * Startup: intentar detectar automáticamente la batería consultando API una vez.
+     * Estado de conexión
      *****************************************************************/
-    async function initialDetect() {
-      try {
-        const headers = AUTH_TOKEN ? { 'Authorization': 'Bearer ' + AUTH_TOKEN } : {};
-        const res = await fetch(API_URL, { method: 'GET', cache: 'no-store', headers });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const json = await res.json();
-        if (json && (json.storedWh != null || json.percentage != null || json.totalGeneratedWh != null)) {
-          updateFromApi(json);
-          // iniciar polling continuo
-          startPolling();
-          return;
-        }
-      } catch (e) {
-        // no hay endpoint ahora -> marcar desconectado y aún así iniciar polling para detectar más tarde
+    function setBatteryDetected(detected) {
+      batteryDetected = !!detected;
+      overlay.style.display = batteryDetected ? 'none' : 'flex';
+      pauseBtn.disabled = !batteryDetected;
+
+      if (detected) {
+        statusDot.classList.add('connected');
+        statusDot.classList.remove('error');
+        statusText.textContent = '✓ Conectado a Firebase';
+      } else {
+        statusDot.classList.remove('connected');
+        statusDot.classList.add('error');
+        statusText.textContent = '✗ Desconectado de Firebase';
       }
-      setBatteryDetected(false);
-      startPolling();
+
+      if (!batteryDetected) {
+        if (clearOnDisconnectCb.checked) {
+          labels.length = 0;
+          batteryData.length = 0;
+          voltageData.length = 0;
+          chart.update();
+          localStorage.removeItem('dag_battery_log');
+        }
+        stopSimulation();
+      } else {
+        updateBatteryVisual();
+        if (persistCb.checked) restorePersist();
+      }
     }
 
-    // Ejecutar inicialización
-    initialDetect();
+    /*****************************************************************
+     * Startup
+     *****************************************************************/
+    function init() {
+      setBatteryDetected(false);
+      startMonitoring();
+    }
 
-    // Guardado limpio al salir (si persist)
     window.addEventListener('beforeunload', () => {
       if (persistCb.checked) maybePersist();
     });
 
-    // Exponer botón para pruebas manuales desde consola si hace falta:
-    window.__dag = { updateFromApi, setBatteryDetected };
+    // Iniciar
+    init();
 
+    // Exponer para debug
+    window.__dag = { updateFromFirebase, setBatteryDetected, currentBattery, currentVoltage };
   </script>
 </body>
 </html>
